@@ -12,7 +12,7 @@ use csv::ReaderBuilder;
 pub enum Strand {
     Forward,
     Reverse,
-    Unknown
+    Unknown,
 }
 
 mod serde_strand {
@@ -85,6 +85,70 @@ mod serde_strand {
     impl std::error::Error for StrandError {}
 }
 
+mod serde_score {
+    use super::*;
+
+    struct ScoreVisitor;
+
+    impl<'de> Visitor<'de> for ScoreVisitor {
+        type Value = Option<f64>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a floating point score or a dot")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            match value {
+                "." => Ok(None),
+                _ => value
+                    .parse::<f64>()
+                    .map(Some)
+                    .map_err(|_| E::custom(format!("invalid character {:?} in the strand", value))),
+            }
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ScoreVisitor)
+    }
+
+    pub fn serialize<S>(strand: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *strand {
+            Some(v) => serializer.serialize_f64(v),
+            None => serializer.serialize_char('.'),
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum ScoreError {
+        Message(String),
+    }
+
+    impl de::Error for ScoreError {
+        fn custom<T: Display>(msg: T) -> Self {
+            ScoreError::Message(msg.to_string())
+        }
+    }
+
+    impl Display for ScoreError {
+        fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                ScoreError::Message(msg) => formatter.write_str(msg),
+            }
+        }
+    }
+
+    impl std::error::Error for ScoreError {}
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Record {
@@ -93,7 +157,8 @@ struct Record {
     feature: String,
     start: u64,
     end: u64,
-    score: String,
+    #[serde(with = "serde_score")]
+    score: Option<f64>,
     #[serde(with = "serde_strand")]
     strand: Option<Strand>,
     frame: String,
@@ -125,7 +190,7 @@ fn writer() -> Result<(), Box<dyn Error>> {
             feature: "Initiator methionine".to_owned(),
             start: 1,
             end: 1,
-            score: ".".to_owned(),
+            score: None,
             strand: Some(Strand::Forward),
             frame: ".".to_owned(),
             attributes: "Note=Removed,Obsolete;ID=test".to_owned(),
@@ -136,7 +201,7 @@ fn writer() -> Result<(), Box<dyn Error>> {
             feature: "Chain".to_owned(),
             start: 2,
             end: 176,
-            score: "50".to_owned(),
+            score: Some(50.0),
             strand: Some(Strand::Forward),
             frame: ".".to_owned(),
             attributes: "Note=ATP-dependent protease subunit HslV;ID=PRO_0000148105".to_owned(),

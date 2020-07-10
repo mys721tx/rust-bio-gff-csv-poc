@@ -14,69 +14,74 @@ pub enum Strand {
     Reverse,
 }
 
-struct StrandVisitor;
+mod serde_strand {
+    use super::*;
 
-impl<'de> Visitor<'de> for StrandVisitor {
-    type Value = Option<Strand>;
+    struct StrandVisitor;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a character")
+    impl<'de> Visitor<'de> for StrandVisitor {
+        type Value = Option<Strand>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a character")
+        }
+
+        fn visit_char<E>(self, value: char) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            match value {
+                '+' | 'f' | 'F' => Ok(Some(Strand::Forward)),
+                '-' | 'r' | 'R' => Ok(Some(Strand::Reverse)),
+                '.' | '?' => Ok(None),
+                _ => Err(E::custom(format!(
+                    "invalid character {:?} in the strand",
+                    value
+                ))),
+            }
+        }
     }
 
-    fn visit_char<E>(self, value: char) -> Result<Self::Value, E>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Strand>, D::Error>
     where
-        E: de::Error,
+        D: Deserializer<'de>,
     {
-        match value {
-            '+' | 'f' | 'F' => Ok(Some(Strand::Forward)),
-            '-' | 'r' | 'R' => Ok(Some(Strand::Reverse)),
-            '.' | '?' => Ok(None),
-            _ => Err(E::custom(format!(
-                "invalid character {:?} in the strand",
-                value
-            ))),
+        deserializer.deserialize_char(StrandVisitor)
+    }
+
+    pub fn serialize<S>(strand: &Option<Strand>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match strand {
+            Some(Strand::Forward) => serializer.serialize_char('+'),
+            Some(Strand::Reverse) => serializer.serialize_char('-'),
+            None => serializer.serialize_char('.'),
         }
     }
-}
 
-fn deserialize_option_strand<'de, D>(deserializer: D) -> Result<Option<Strand>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    deserializer.deserialize_char(StrandVisitor)
-}
-
-fn serialize_option_strand<S>(strand: &Option<Strand>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match strand {
-        Some(Strand::Forward) => serializer.serialize_char('+'),
-        Some(Strand::Reverse) => serializer.serialize_char('-'),
-        None => serializer.serialize_char('.'),
+    #[derive(Debug, Clone)]
+    pub enum StrandError {
+        Message(String),
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum StrandError {
-    Message(String),
-}
-
-impl de::Error for StrandError {
-    fn custom<T: Display>(msg: T) -> Self {
-        StrandError::Message(msg.to_string())
-    }
-}
-
-impl Display for StrandError {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            StrandError::Message(msg) => formatter.write_str(msg),
+    impl de::Error for StrandError {
+        fn custom<T: Display>(msg: T) -> Self {
+            StrandError::Message(msg.to_string())
         }
     }
+
+    impl Display for StrandError {
+        fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                StrandError::Message(msg) => formatter.write_str(msg),
+            }
+        }
+    }
+
+    impl std::error::Error for StrandError {}
 }
 
-impl std::error::Error for StrandError {}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Record {
@@ -86,10 +91,7 @@ struct Record {
     start: u64,
     end: u64,
     score: String,
-    #[serde(
-        serialize_with = "serialize_option_strand",
-        deserialize_with = "deserialize_option_strand"
-    )]
+    #[serde(with = "serde_strand")]
     strand: Option<Strand>,
     frame: String,
     attributes: String,

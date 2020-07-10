@@ -12,13 +12,12 @@ use csv::ReaderBuilder;
 pub enum Strand {
     Forward,
     Reverse,
-    Unknown,
 }
 
 struct StrandVisitor;
 
 impl<'de> Visitor<'de> for StrandVisitor {
-    type Value = Strand;
+    type Value = Option<Strand>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a character")
@@ -29,9 +28,9 @@ impl<'de> Visitor<'de> for StrandVisitor {
         E: de::Error,
     {
         match value {
-            '+' | 'f' | 'F' => Ok(Strand::Forward),
-            '-' | 'r' | 'R' => Ok(Strand::Reverse),
-            '.' | '?' => Ok(Strand::Unknown),
+            '+' | 'f' | 'F' => Ok(Some(Strand::Forward)),
+            '-' | 'r' | 'R' => Ok(Some(Strand::Reverse)),
+            '.' | '?' => Ok(None),
             _ => Err(E::custom(format!(
                 "invalid character {:?} in the strand",
                 value
@@ -40,25 +39,21 @@ impl<'de> Visitor<'de> for StrandVisitor {
     }
 }
 
-impl<'de> Deserialize<'de> for Strand {
-    fn deserialize<D>(deserializer: D) -> Result<Strand, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_char(StrandVisitor)
-    }
+fn deserialize_option_strand<'de, D>(deserializer: D) -> Result<Option<Strand>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_char(StrandVisitor)
 }
 
-impl Serialize for Strand {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Strand::Forward => serializer.serialize_char('+'),
-            Strand::Reverse => serializer.serialize_char('-'),
-            Strand::Unknown => serializer.serialize_char('.'),
-        }
+fn serialize_option_strand<S>(strand: &Option<Strand>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match strand {
+        Some(Strand::Forward) => serializer.serialize_char('+'),
+        Some(Strand::Reverse) => serializer.serialize_char('-'),
+        None => serializer.serialize_char('.'),
     }
 }
 
@@ -91,7 +86,11 @@ struct Record {
     start: u64,
     end: u64,
     score: String,
-    strand: Strand,
+    #[serde(
+        serialize_with = "serialize_option_strand",
+        deserialize_with = "deserialize_option_strand"
+    )]
+    strand: Option<Strand>,
     frame: String,
     attributes: String,
 }
@@ -122,7 +121,7 @@ fn writer() -> Result<(), Box<dyn Error>> {
             start: 1,
             end: 1,
             score: ".".to_owned(),
-            strand: Strand::Forward,
+            strand: Some(Strand::Forward),
             frame: ".".to_owned(),
             attributes: "Note=Removed,Obsolete;ID=test".to_owned(),
         },
@@ -133,7 +132,7 @@ fn writer() -> Result<(), Box<dyn Error>> {
             start: 2,
             end: 176,
             score: "50".to_owned(),
-            strand: Strand::Forward,
+            strand: Some(Strand::Forward),
             frame: ".".to_owned(),
             attributes: "Note=ATP-dependent protease subunit HslV;ID=PRO_0000148105".to_owned(),
         },

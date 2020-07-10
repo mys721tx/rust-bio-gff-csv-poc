@@ -12,6 +12,7 @@ use csv::ReaderBuilder;
 pub enum Strand {
     Forward,
     Reverse,
+    Unknown
 }
 
 mod serde_strand {
@@ -33,7 +34,8 @@ mod serde_strand {
             match value {
                 '+' | 'f' | 'F' => Ok(Some(Strand::Forward)),
                 '-' | 'r' | 'R' => Ok(Some(Strand::Reverse)),
-                '.' | '?' => Ok(None),
+                '?' => Ok(Some(Strand::Unknown)),
+                '.' => Ok(None),
                 _ => Err(E::custom(format!(
                     "invalid character {:?} in the strand",
                     value
@@ -56,6 +58,7 @@ mod serde_strand {
         match strand {
             Some(Strand::Forward) => serializer.serialize_char('+'),
             Some(Strand::Reverse) => serializer.serialize_char('-'),
+            Some(Strand::Unknown) => serializer.serialize_char('.'),
             None => serializer.serialize_char('.'),
         }
     }

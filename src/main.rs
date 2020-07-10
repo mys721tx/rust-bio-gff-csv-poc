@@ -63,27 +63,6 @@ mod serde_strand {
             None => serializer.serialize_char('.'),
         }
     }
-
-    #[derive(Debug, Clone)]
-    pub enum StrandError {
-        Message(String),
-    }
-
-    impl de::Error for StrandError {
-        fn custom<T: Display>(msg: T) -> Self {
-            StrandError::Message(msg.to_string())
-        }
-    }
-
-    impl Display for StrandError {
-        fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                StrandError::Message(msg) => formatter.write_str(msg),
-            }
-        }
-    }
-
-    impl std::error::Error for StrandError {}
 }
 
 mod serde_score {
@@ -107,7 +86,7 @@ mod serde_score {
                 _ => value
                     .parse::<f64>()
                     .map(Some)
-                    .map_err(|_| E::custom(format!("invalid character {:?} in the strand", value))),
+                    .map_err(|_| E::custom(format!("invalid character {:?} in score", value))),
             }
         }
     }
@@ -128,27 +107,6 @@ mod serde_score {
             None => serializer.serialize_char('.'),
         }
     }
-
-    #[derive(Debug, Clone)]
-    pub enum ScoreError {
-        Message(String),
-    }
-
-    impl de::Error for ScoreError {
-        fn custom<T: Display>(msg: T) -> Self {
-            ScoreError::Message(msg.to_string())
-        }
-    }
-
-    impl Display for ScoreError {
-        fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                ScoreError::Message(msg) => formatter.write_str(msg),
-            }
-        }
-    }
-
-    impl std::error::Error for ScoreError {}
 }
 
 mod serde_frame {
@@ -192,11 +150,13 @@ mod serde_frame {
         S: Serializer,
     {
         match *strand {
-            Some(v) => if 0 < v && v < 3 {
-                serializer.serialize_u64(0)
-            } else {
-                Err(ser::Error::custom(format!("invalid frame {}", v)))
-            },
+            Some(v) => {
+                if 0 < v && v < 3 {
+                    serializer.serialize_u64(0)
+                } else {
+                    Err(ser::Error::custom(format!("invalid frame {}", v)))
+                }
+            }
             None => serializer.serialize_char('.'),
         }
     }
